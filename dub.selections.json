@@ -1,4 +1,7 @@
 {
 	"fileVersion": 1,
-	"versions": {}
+	"versions": {
+		"derelict-util": "1.9.1",
+		"derelict-fi": "1.9.0"
+	}
 }

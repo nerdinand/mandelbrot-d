@@ -2,5 +2,6 @@
 	"name" : "mandelbrot",
 	"description" : "Hello World - A minimal DUB bundle.",
 	"dependencies" : {
+    "derelict-fi": "~>1.9.0"
 	}
 }
