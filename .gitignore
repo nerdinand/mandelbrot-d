@@ -1,3 +1,6 @@
 .buildpath
 .dub
 .project
+.DS_Store
+mandelbrot.png
+mandelbrot
