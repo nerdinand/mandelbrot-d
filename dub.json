@@ -1,7 +1,7 @@
 {
-	"name" : "mandelbrot",
-	"description" : "Hello World - A minimal DUB bundle.",
-	"dependencies" : {
-    "derelict-fi": "~>1.9.0"
+	"name": "mandelbrot",
+	"description": "My Mandelbrot toy project",
+	"dependencies": {
+    	"derelict-fi": "~>1.9.0"
 	}
 }
