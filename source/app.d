@@ -4,8 +4,8 @@ import derelict.freeimage.freeimage;
 auto immutable maxIterations = 1000;
 auto immutable stepWidth = 0.01;
 
-auto immutable realPartitions = 1;
-auto immutable imaginaryPartitions = 1;
+auto immutable realPartitions = 16;
+auto immutable imaginaryPartitions = 16;
 			
 auto immutable minReal = -2.5;
 auto immutable maxReal = 1.0;
@@ -22,22 +22,28 @@ auto immutable realsPerThread = cast(int)(realPartitionWidth/stepWidth);
 auto immutable imaginariesPerThread = cast(int)(imaginaryPartitionWidth/stepWidth);
 
 void main() {
-	Tid[] tids;
-
+	writeln("realsPerThread: ", realsPerThread);
+	writeln("imaginariesPerThread: ", imaginariesPerThread);
+	
+	writeln("totalCPUs: ", totalCPUs);
+	
 	DerelictFI.load();
 	FreeImage_Initialise();
-		
+	
+	Task!(parallelTask, double, double)*[] tasks;
+	int[] realStartIndices;
+	int[] imaginaryStartIndices;
+	
 	foreach(realPartition; 0..realPartitions) {
 		foreach(imaginaryPartition; 0..imaginaryPartitions) {
 			writeln("spawn");
-			tids ~= spawnLinked(
-				&iterationThread, 
-				thisTid,
-				minReal + (realPartition * realPartitionWidth), 
-				minImaginary + (imaginaryPartition * imaginaryPartitionWidth),
-				realPartition * realsPerThread,
-				imaginaryPartition * imaginariesPerThread
-			);
+			
+			auto newTask = task!parallelTask(minReal + (realPartition * realPartitionWidth), minImaginary + (imaginaryPartition * imaginaryPartitionWidth));
+    		newTask.executeInNewThread();
+    		
+    		tasks ~= newTask;
+    		realStartIndices ~= realPartition * realsPerThread;
+    		imaginaryStartIndices ~= imaginaryPartition * imaginariesPerThread;
 		}
 	}
 	
@@ -46,42 +52,42 @@ void main() {
 	
 	auto image = FreeImage_Allocate(realDimension, imaginaryDimension, 24);
 	
-	auto white = RGBQUAD(255, 255, 255, 255);
-	auto black = RGBQUAD(0, 0, 0, 255);
-	
 	writeln("waiting");
-	foreach(tid; tids) {
-		receive(
-			(LinkTerminated exc) {
-                writeln("The owner has terminated; exiting.");
-            }
-        );
+	int taskIndex = 0;
+	foreach(task; tasks) {
+		auto results = task.yieldForce();
 		
-		auto message = receiveOnly!(int, int, int[imaginariesPerThread][realsPerThread])();
-		writeln("received");
-		
-		auto realStartIndex = message[0];
-		auto imaginaryStartIndex = message[1];
-		auto results = message[2];
+		auto realStartIndex = realStartIndices[taskIndex];
+		auto imaginaryStartIndex = imaginaryStartIndices[taskIndex];
 		
 		auto i = 0;
 		foreach(line; results) {
 			auto j = 0;
-			foreach(num; line) {
-				FreeImage_SetPixelColor(image, realStartIndex + i, imaginaryStartIndex + j, &(num >= maxIterations ? white : black));
+			foreach(numIterations; line) {
+				auto color = numIterationsToColor(numIterations);
+				FreeImage_SetPixelColor(image, realStartIndex + i, imaginaryStartIndex + j, &color);
 				j++;
 			}
 			i++;
 		}
+		
+		taskIndex++;
 	}
 	
 	FreeImage_Save(FIF_PNG, image, "mandelbrot.png", 0);
 	FreeImage_DeInitialise();
 }
 
-void iterationThread(Tid ownerTid, double minReal, double minImaginary, int realStartIndex, int imaginaryStartIndex) {
+RGBQUAD numIterationsToColor(int numIterations) {
+	ubyte r = cast(ubyte) (numIterations * 0.255);
+	ubyte b = cast(ubyte) (numIterations * 0.255);
+	ubyte g = cast(ubyte) (numIterations * 0.255);
+	return RGBQUAD(r, g, b, 255);
+}
+
+int[imaginariesPerThread][realsPerThread] parallelTask(double minReal, double minImaginary) {
 	int[imaginariesPerThread][realsPerThread] results;
-		
+	
 	foreach(realIndex; 0..realsPerThread) {
 		foreach(imaginaryIndex; 0..imaginariesPerThread) {
 			auto samplePoint = complex(minReal + realIndex * stepWidth, minImaginary + imaginaryIndex * stepWidth);
@@ -91,8 +97,9 @@ void iterationThread(Tid ownerTid, double minReal, double minImaginary, int real
 		}
 	}
 	
-	writeln("sending");
-	ownerTid.send(realStartIndex, imaginaryStartIndex, results);
+	writeln("return");
+	
+	return results;
 }
 
 auto iterate(immutable Complex!double samplePoint) {
